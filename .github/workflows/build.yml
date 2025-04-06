@@ -1471,103 +1471,113 @@ jobs:
           key: android-build
           evict-old-files: 1d
 
-      - name: Set up JDK
-        uses: actions/setup-java@v3
-        with:
-          java-version: 17
-          distribution: zulu
+#      - name: Set up JDK
+#        uses: actions/setup-java@v3
+#        with:
+#          java-version: 17
+#          distribution: zulu
+#
+#      - name: Setup Android SDK
+#        uses: android-actions/setup-android@v3
+#        with:
+#          log-accepted-android-sdk-licenses: false
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          log-accepted-android-sdk-licenses: false
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install build-essential
+          sudo apt-get install cmake
+          export PWD=`pwd`
+          export ANDROID_PLATFORM=android-34
+          export ANDROID_NDK=${PWD}/android-ndk-r26c
+          wget --no-config --quiet --show-progress -O android-ndk-r26c-linux.zip  https://dl.google.com/android/repository/android-ndk-r26c-linux.zip
+          unzip android-ndk-r26c-linux.zip
 
       - name: Build
         run: |
-          cd examples/llama.android
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENMP=OFF -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=latest -DCMAKE_C_FLAGS=-march=armv8.7-a
+          cmake --build build -j $(nproc)
 
-          ./gradlew build --no-daemon
-
-  release:
-    if: ${{ ( github.event_name == 'push' && github.ref == 'refs/heads/master' ) || github.event.inputs.create_release == 'true' }}
-
-    runs-on: ubuntu-latest
-
-    needs:
-      - ubuntu-cpu-cmake
-      - ubuntu-22-cmake-vulkan
-      - windows-latest-cmake
-      - windows-2019-cmake-cuda
-      - windows-latest-cmake-sycl
-      - windows-latest-cmake-hip-release
-      - macOS-latest-cmake-arm64
-      - macOS-latest-cmake-x64
-
-    steps:
-      - name: Clone
-        id: checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2.16
-        with:
-          key: release
-          evict-old-files: 1d
-
-      - name: Determine tag name
-        id: tag
-        shell: bash
-        run: |
-          BUILD_NUMBER="$(git rev-list --count HEAD)"
-          SHORT_HASH="$(git rev-parse --short=7 HEAD)"
-          if [[ "${{ env.BRANCH_NAME }}" == "master" ]]; then
-            echo "name=b${BUILD_NUMBER}" >> $GITHUB_OUTPUT
-          else
-            SAFE_NAME=$(echo "${{ env.BRANCH_NAME }}" | tr '/' '-')
-            echo "name=${SAFE_NAME}-b${BUILD_NUMBER}-${SHORT_HASH}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Download artifacts
-        id: download-artifact
-        uses: actions/download-artifact@v4
-        with:
-          path: ./artifact
-
-      - name: Move artifacts
-        id: move_artifacts
-        run: mkdir -p ./artifact/release && mv ./artifact/*/*.zip ./artifact/release
-
-      - name: Create release
-        id: create_release
-        uses: ggml-org/action-create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag.outputs.name }}
-
-      - name: Upload release
-        id: upload_release
-        uses: actions/github-script@v3
-        with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            const path = require('path');
-            const fs = require('fs');
-            const release_id = '${{ steps.create_release.outputs.id }}';
-            for (let file of await fs.readdirSync('./artifact/release')) {
-              if (path.extname(file) === '.zip') {
-                console.log('uploadReleaseAsset', file);
-                await github.repos.uploadReleaseAsset({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  release_id: release_id,
-                  name: file,
-                  data: await fs.readFileSync(`./artifact/release/${file}`)
-                });
-              }
-            }
+#  release:
+#    if: ${{ ( github.event_name == 'push' && github.ref == 'refs/heads/master' ) || github.event.inputs.create_release == 'true' }}
+#
+#    runs-on: ubuntu-latest
+#
+#    needs:
+#      - ubuntu-cpu-cmake
+#      - ubuntu-22-cmake-vulkan
+#      - windows-latest-cmake
+#      - windows-2019-cmake-cuda
+#      - windows-latest-cmake-sycl
+#      - windows-latest-cmake-hip-release
+#      - macOS-latest-cmake-arm64
+#      - macOS-latest-cmake-x64
+#
+#    steps:
+#      - name: Clone
+#        id: checkout
+#        uses: actions/checkout@v4
+#        with:
+#          fetch-depth: 0
+#
+#      - name: ccache
+#        uses: hendrikmuhs/ccache-action@v1.2.16
+#        with:
+#          key: release
+#          evict-old-files: 1d
+#
+#      - name: Determine tag name
+#        id: tag
+#        shell: bash
+#        run: |
+#          BUILD_NUMBER="$(git rev-list --count HEAD)"
+#          SHORT_HASH="$(git rev-parse --short=7 HEAD)"
+#          if [[ "${{ env.BRANCH_NAME }}" == "master" ]]; then
+#            echo "name=b${BUILD_NUMBER}" >> $GITHUB_OUTPUT
+#          else
+#            SAFE_NAME=$(echo "${{ env.BRANCH_NAME }}" | tr '/' '-')
+#            echo "name=${SAFE_NAME}-b${BUILD_NUMBER}-${SHORT_HASH}" >> $GITHUB_OUTPUT
+#          fi
+#
+#      - name: Download artifacts
+#        id: download-artifact
+#        uses: actions/download-artifact@v4
+#        with:
+#          path: ./artifact
+#
+#      - name: Move artifacts
+#        id: move_artifacts
+#        run: mkdir -p ./artifact/release && mv ./artifact/*/*.zip ./artifact/release
+#
+#      - name: Create release
+#        id: create_release
+#        uses: ggml-org/action-create-release@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          tag_name: ${{ steps.tag.outputs.name }}
+#
+#      - name: Upload release
+#        id: upload_release
+#        uses: actions/github-script@v3
+#        with:
+#          github-token: ${{secrets.GITHUB_TOKEN}}
+#          script: |
+#            const path = require('path');
+#            const fs = require('fs');
+#            const release_id = '${{ steps.create_release.outputs.id }}';
+#            for (let file of await fs.readdirSync('./artifact/release')) {
+#              if (path.extname(file) === '.zip') {
+#                console.log('uploadReleaseAsset', file);
+#                await github.repos.uploadReleaseAsset({
+#                  owner: context.repo.owner,
+#                  repo: context.repo.repo,
+#                  release_id: release_id,
+#                  name: file,
+#                  data: await fs.readFileSync(`./artifact/release/${file}`)
+#                });
+#              }
+#            }
 
 #  ubuntu-latest-gcc:
 #    runs-on: ubuntu-latest
